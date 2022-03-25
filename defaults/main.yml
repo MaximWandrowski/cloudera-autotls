@@ -1,0 +1,15 @@
+---
+
+autotls__cdp_usr: admin
+autotls__cdp_pwd: admin
+autotls__sys_usr: root
+autotls__sys_pwd: root
+
+autotls__pwd: autotls_password
+
+autotls__directory: /opt/cloudera/TLS
+autotls__api_base: http://localhost:7180/api/v43
+autotls__domain: localdomain
+autotls__host_certs: []
+
+...

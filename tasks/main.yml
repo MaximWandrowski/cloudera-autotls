@@ -1,0 +1,107 @@
+---
+
+- name: Create CA Certificates Location
+  ansible.builtin.file:
+    path: '{{ autotls__directory }}'
+    state: directory
+    owner: cloudera-scm
+    group: cloudera-scm
+
+- name: Create Private Key with Password Protection
+  become: no
+  delegate_to: 127.0.0.1
+  community.crypto.openssl_privatekey:
+    path: '../autotls.pem.key'
+    cipher: auto
+    passphrase: '{{ autotls__pwd }}'
+
+- name: Create Certificate Signing Request (CSR) for CA Certificate
+  become: no
+  delegate_to: 127.0.0.1
+  community.crypto.openssl_csr_pipe:
+    privatekey_path: '../autotls.pem.key'
+    privatekey_passphrase: '{{ autotls__pwd }}'
+    common_name: ip-10-0-0-42.eu-central-1.compute.internal
+    use_common_name_for_san: true
+    basic_constraints:
+      - 'CA:TRUE'
+    basic_constraints_critical: yes
+    key_usage:
+      - keyCertSign
+    key_usage_critical: true
+  register: ca_csr
+
+- name: Create Self-Signed CA Certificate from CSR
+  become: no
+  delegate_to: 127.0.0.1
+  community.crypto.x509_certificate:
+    path: '../autotls.pem'
+    csr_content: '{{ ca_csr.csr }}'
+    privatekey_path: '../autotls.pem.key'
+    privatekey_passphrase: '{{ autotls__pwd }}'
+    provider: selfsigned
+
+- name: Copy TLS Files in Place
+  ansible.builtin.copy:
+    src: ../{{ item }}
+    dest: '{{ autotls__directory }}'
+    owner: cloudera-scm
+    group: cloudera-scm
+  with_items:
+    - autotls.pem
+    - autotls.pem.key
+
+# OPTION 2B
+#- name: Copy TLS Files in Place
+#  ansible.builtin.copy:
+#    src: ./files/{{ item }}
+#    dest: /opt/cloudera/TLS/
+#    owner: cloudera-scm
+#    group: cloudera-scm
+#  with_items:
+#    - hosts-cert.pem
+#    - hosts-cert.pem.key
+#    - key.pwd
+#    - truststore.ks
+#    - truststore.pem
+#    - truststore.pwd
+#
+#- name: Concatenate host_certs List
+#  run_once: true
+#  ansible.builtin.set_fact:
+#    host_certs: >
+#      {{ host_certs }} + [ {
+#        'hostname': '{{ item }}.{{ domain }}',
+#        'certificate' : '/opt/cloudera/SSL/hosts-cert.pem',
+#        'key' : '/opt/cloudera/SSL/hosts-cert.pem.key'
+#      } ]
+#  with_items: '{{ groups.all }}'
+#
+#- name: Construct JSON Request Body
+#  run_once: true
+#  ansible.builtin.set_fact:
+#    json_body:
+#      location: /opt/cloudera/AutoTLS
+#      sshPort: 22
+#      userName: '{{ sys_usr }}'
+#      password: '{{ sys_pwd }}'
+#      customCA: true
+#      configureAllServices: true
+#      interpretAsFilenames: true
+#      cmHostCert: /opt/cloudera/SSL/hosts-cert.pem
+#      cmHostKey: /opt/cloudera/SSL/hosts-cert.pem.key
+#      caCert: /opt/cloudera/SSL/truststore.pem
+#      keystorePasswd: /opt/cloudera/SSL/key.pwd
+#      truststorePasswd: /opt/cloudera/SSL/truststore.pwd
+#      hostCerts: '{{ host_certs }}'
+#
+#- name: Setup AutoTLS
+#  ansible.builtin.uri:
+#    method: POST
+#    url: '{{ api_base }}/cm/commands/generateCmca'
+#    url_username: '{{ cdp_usr }}'
+#    url_password: '{{ cdp_pwd }}'
+#    body_format: json
+#    body: '{{ json_body }}'
+
+...
